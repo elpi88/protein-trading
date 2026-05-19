@@ -1,0 +1,80 @@
+# ============================================================
+# PROTEIN TRADING — .gitignore
+# Cosa NON caricare mai su GitHub
+# ============================================================
+
+# --- Dati e file business sensibili (NON pubblicare mai) ---
+*.xlsx
+*.xlsm
+*.xls
+*.xlsb
+audit_log.csv
+backups/
+attachments/
+credenziali.env
+.env
+.env.*
+
+# --- Database (verra' migrato in Fase 2) ---
+*.db
+*.sqlite
+*.sqlite3
+protein_trading.db
+
+# --- File Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- Virtual environment (Python) ---
+.venv/
+venv/
+env/
+ENV/
+.venv-*/
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Streamlit ---
+.streamlit/secrets.toml
+
+# --- Log e temp ---
+*.log
+*.tmp
+*.bak
+*.backup
+~$*
+
+# --- Macro VBA esportate (workflow legacy) ---
+*.bas
+
+# --- File specifici progetto da NON caricare ---
+Protein_Trading_ERP_FULL.xlsm
+Protein_Trading_ERP_FULL_BACKUP_*.xlsm
+Protein_Trading_ERP_FULL_CORRUPTED.xlsm
+Protein_Trading_ERP_CLEAN.xlsx
+FORNITORI*.xlsx

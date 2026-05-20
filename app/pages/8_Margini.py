@@ -9,6 +9,10 @@ import streamlit as st
 
 from lib.data import get_matches, read_sheet
 from lib.theme import apply_theme, kpi_card, PROTEIN_COLORS
+
+from lib.auth import require_login
+require_login()
+
 try:
     from lib.pdf_export import margins_report
     PDF_OK = True

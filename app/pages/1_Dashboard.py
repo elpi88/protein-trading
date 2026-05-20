@@ -10,6 +10,10 @@ import streamlit as st
 from lib.data import read_sheet, get_kpis
 from lib.theme import apply_theme, kpi_card, PROTEIN_COLORS
 
+from lib.auth import require_login
+require_login()
+
+
 st.set_page_config(page_title="Dashboard - Protein Trading", page_icon="📊", layout="wide")
 apply_theme()
 

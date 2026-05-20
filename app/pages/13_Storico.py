@@ -9,6 +9,10 @@ import streamlit as st
 from lib.data import read_audit_log, AUDIT_LOG
 from lib.theme import apply_theme, kpi_card
 
+from lib.auth import require_login
+require_login()
+
+
 st.set_page_config(page_title="Storico - Protein Trading", page_icon="📜", layout="wide")
 apply_theme()
 

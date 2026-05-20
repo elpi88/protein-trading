@@ -11,6 +11,10 @@ from lib.data import (
     get_protein_categories, get_countries,
 )
 from lib.theme import apply_theme
+
+from lib.auth import require_login
+require_login()
+
 try:
     from lib.pdf_export import client_card
     PDF_OK = True

@@ -12,6 +12,10 @@ from lib.data import (
 )
 from lib.theme import apply_theme
 
+from lib.auth import require_login
+require_login()
+
+
 st.set_page_config(page_title="Merge duplicati - Protein Trading", page_icon="🔀", layout="wide")
 apply_theme()
 

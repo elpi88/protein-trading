@@ -36,6 +36,15 @@ st.markdown(
 SHEET = "CLIENTS"
 df = read_sheet(SHEET)
 
+PAYMENT_METHODS = [
+    "",
+    "100% CAD, 7 days before ETA",
+    "100% prepayment",
+    "30 days from invoice date, if credit is enough",
+    "30% prepayment 2 weeks before loading, 70% downpayment 2 weeks before ETA",
+    "LC",
+]
+
 left, mid, right = st.columns([3, 2, 1])
 with left:
     q = st.text_input("Cerca", placeholder="Cerca per nome, contatto, paese, email...",
@@ -138,7 +147,23 @@ if mode in ("add", "edit"):
             email = st.text_input("Email", value=str(existing.get("Email", "") or ""))
             phone = st.text_input("Phone", value=str(existing.get("Phone", "") or ""))
             capacity = st.text_input("Monthly Capacity", value=str(existing.get("Monthly Capacity", "") or ""))
-            notes = st.text_area("Notes", value=str(existing.get("Notes", "") or ""), height=85)
+            notes = st.text_area("Notes", value=str(existing.get("Notes", "") or ""), height=60)
+
+        # Riga aggiuntiva: indirizzo scarico + metodo pagamento
+        ca, cb = st.columns(2)
+        with ca:
+            indirizzo = st.text_input("Indirizzo Scarico",
+                                      value=str(existing.get("Indirizzo Scarico", "") or ""))
+        with cb:
+            cur_pay_m = str(existing.get("Metodo di Pagamento", "") or "")
+            if cur_pay_m not in PAYMENT_METHODS:
+                cur_pay_m = ""
+            pay_method = st.selectbox(
+                "Metodo di Pagamento",
+                PAYMENT_METHODS,
+                index=PAYMENT_METHODS.index(cur_pay_m),
+                help="Seleziona il metodo di pagamento standard per questo cliente",
+            )
 
         cb1, cb2, _ = st.columns([1, 1, 4])
         with cb1: save_clicked = st.button("💾 Salva", type="primary", use_container_width=True)
@@ -158,6 +183,8 @@ if mode in ("add", "edit"):
                     "Phone": phone.strip() or None,
                     "Monthly Capacity": capacity.strip() or None,
                     "Notes": notes.strip() or None,
+                    "Indirizzo Scarico": indirizzo.strip() or None,
+                    "Metodo di Pagamento": pay_method or None,
                 }
                 try:
                     if mode == "add":

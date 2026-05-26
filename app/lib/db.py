@@ -55,7 +55,7 @@ SCHEMAS = {
     "CLIENTS": [
         "Client ID", "Company Name", "CONTACT PERSON", "PROTEIN CATEGORY",
         "ITEMS", "COUNTRY", "Email", "Phone", "Monthly Capacity", "Notes",
-        "Indirizzo Scarico",
+        "Indirizzo Scarico", "Metodo di Pagamento",
     ],
     "OFFERS": [
         "Offer ID", "Supplier", "Product", "Subproduct", "Specifics",
@@ -80,7 +80,7 @@ SCHEMAS = {
         "Quantity", "Unit", "Unit Price", "Currency",
         "Subtotal", "Subtotal USD", "VAT %", "VAT Amount",
         "Total Invoice", "Total USD", "Payment Status",
-        "Due Date", "Paid Date", "Notes",
+        "Payment Method", "Due Date", "Paid Date", "Notes",
     ],
 }
 
@@ -271,11 +271,28 @@ def init_db() -> None:
             )
         """)
 
-        # Migrazione: aggiunge "Indirizzo Scarico" alla tabella clients se non esiste
-        try:
+        # Migrazioni colonne nuove — gestite sotto in blocchi separati (PostgreSQL sicuro)
+
+    # Migrazione 1: "Indirizzo Scarico" in clients
+    try:
+        with get_conn() as conn:
             conn.execute('ALTER TABLE clients ADD COLUMN "Indirizzo Scarico" TEXT')
-        except Exception:
-            pass  # Colonna già presente
+    except Exception:
+        pass  # Colonna già presente
+
+    # Migrazione 2: "Metodo di Pagamento" in clients
+    try:
+        with get_conn() as conn:
+            conn.execute('ALTER TABLE clients ADD COLUMN "Metodo di Pagamento" TEXT')
+    except Exception:
+        pass  # Colonna già presente
+
+    # Migrazione 3: "Payment Method" in invoices
+    try:
+        with get_conn() as conn:
+            conn.execute('ALTER TABLE invoices ADD COLUMN "Payment Method" TEXT')
+    except Exception:
+        pass  # Colonna già presente
 
 
 # ----------------------------------------------------------------------

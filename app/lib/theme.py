@@ -18,15 +18,15 @@ def apply_theme():
             max-width: 1400px;
         }
 
-        /* Sidebar */
+        /* Sidebar - sfondo blu, testo chiaro solo su elementi custom (non nav links) */
         section[data-testid="stSidebar"] {
             background: linear-gradient(180deg, #0b3d91 0%, #08306b 100%);
         }
-        section[data-testid="stSidebar"] * {
-            color: #f1f5f9 !important;
-        }
-        section[data-testid="stSidebar"] .stRadio label,
-        section[data-testid="stSidebar"] .stSelectbox label {
+        section[data-testid="stSidebar"] p,
+        section[data-testid="stSidebar"] span,
+        section[data-testid="stSidebar"] div:not([data-testid]),
+        section[data-testid="stSidebar"] button,
+        section[data-testid="stSidebar"] hr {
             color: #f1f5f9 !important;
         }
 

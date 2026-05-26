@@ -30,6 +30,21 @@ def apply_theme():
             color: #f1f5f9 !important;
         }
 
+        /* Pulsante apri/chiudi sidebar - visibile su tutti i dispositivi */
+        [data-testid="collapsedControl"] {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background-color: #0b3d91 !important;
+            border-radius: 0 8px 8px 0 !important;
+            padding: 12px 8px !important;
+            top: 12px !important;
+        }
+        [data-testid="collapsedControl"] svg {
+            fill: white !important;
+            color: white !important;
+        }
+
         /* Card KPI */
         .kpi-card {
             background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);

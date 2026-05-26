@@ -55,6 +55,7 @@ SCHEMAS = {
     "CLIENTS": [
         "Client ID", "Company Name", "CONTACT PERSON", "PROTEIN CATEGORY",
         "ITEMS", "COUNTRY", "Email", "Phone", "Monthly Capacity", "Notes",
+        "Indirizzo Scarico",
     ],
     "OFFERS": [
         "Offer ID", "Supplier", "Product", "Subproduct", "Specifics",
@@ -269,6 +270,12 @@ def init_db() -> None:
                 active INTEGER DEFAULT 1
             )
         """)
+
+        # Migrazione: aggiunge "Indirizzo Scarico" alla tabella clients se non esiste
+        try:
+            conn.execute('ALTER TABLE clients ADD COLUMN "Indirizzo Scarico" TEXT')
+        except Exception:
+            pass  # Colonna già presente
 
 
 # ----------------------------------------------------------------------

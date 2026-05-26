@@ -22,6 +22,7 @@ nav_items = [
     ("pages/11_Spedizioni.py",      "🚢 Spedizioni"),
     ("pages/12_Ordini.py",          "📦 Ordini"),
     ("pages/13_Storico.py",         "📜 Storico"),
+    ("pages/14_Ordini_Fresco.py",   "🥩 Ordini Fresco"),
     ("pages/6_Impostazioni.py",     "⚙️ Impostazioni"),
 ]
 for i, (page, label) in enumerate(nav_items):

@@ -7,6 +7,7 @@ from datetime import datetime
 import streamlit as st
 
 from lib.data import DB_FILE, BACKUP_DIR, make_backup, export_to_excel
+from lib.db import DATABASE_URL
 from lib.theme import apply_theme
 from lib import auth
 
@@ -30,8 +31,16 @@ st.markdown(
 # Database info
 # ---------------------------------------------------------------------
 st.markdown("### Database")
-st.markdown(f"**Percorso:** `{DB_FILE}`")
-if DB_FILE.exists():
+if DATABASE_URL:
+    st.success("✅ Database: **PostgreSQL su Supabase** (cloud)")
+    host = DATABASE_URL.split("@")[-1].split("/")[0] if "@" in DATABASE_URL else "Supabase"
+    st.markdown(f"**Host:** `{host}`")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Tipo", "PostgreSQL")
+    c2.metric("Provider", "Supabase")
+    c3.metric("Stato", "Online ✅")
+elif DB_FILE.exists():
+    st.markdown(f"**Percorso:** `{DB_FILE}`")
     stat = DB_FILE.stat()
     size_kb = stat.st_size / 1024
     mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")

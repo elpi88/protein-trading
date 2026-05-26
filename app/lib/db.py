@@ -271,6 +271,41 @@ def init_db() -> None:
             )
         """)
 
+        # Tabella trasportatori
+        _id_col = "id SERIAL PRIMARY KEY" if DATABASE_URL else "id INTEGER PRIMARY KEY AUTOINCREMENT"
+        conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS transporters (
+                {_id_col},
+                "Company Name" TEXT NOT NULL,
+                "Category" TEXT,
+                "Country" TEXT,
+                "City" TEXT,
+                "Address" TEXT,
+                "Phone" TEXT,
+                "Email" TEXT,
+                "VAT" TEXT,
+                "Notes" TEXT
+            )
+        """)
+
+        # Tabella destinazioni clienti
+        conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS client_destinations (
+                {_id_col},
+                "Cod. Destinazione" TEXT,
+                "Cod. Cliente" TEXT,
+                "Dest. Name" TEXT,
+                "Address" TEXT,
+                "City" TEXT,
+                "Province" TEXT,
+                "Country" TEXT,
+                "Phone" TEXT,
+                "Email" TEXT,
+                "VAT" TEXT,
+                "Notes" TEXT
+            )
+        """)
+
         # Migrazioni colonne nuove — gestite sotto in blocchi separati (PostgreSQL sicuro)
 
     # Migrazione 1: "Indirizzo Scarico" in clients

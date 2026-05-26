@@ -120,6 +120,7 @@ pages = [
     st.Page("pages/10_Merge_Duplicati.py", title="Merge Duplicati", icon="🔀"),
     st.Page("pages/14_Ordini_Fresco.py",   title="Ordini Fresco",   icon="🥩"),
     st.Page("pages/15_Carico_Camion.py",   title="Carico Camion",   icon="🚛"),
+    st.Page("pages/16_Trasportatori.py",   title="Trasportatori",   icon="🚚"),
     st.Page("pages/6_Impostazioni.py",     title="Impostazioni",    icon="⚙️"),
 ]
 

@@ -35,13 +35,15 @@ def _pk():
 
 
 def init_truck_tables():
-    with get_conn() as conn:
-        # Migrazione: aggiunge "Indirizzo Scarico" alla tabella clients se non esiste
-        try:
+    # Migrazione in transazione separata (se fallisce fa rollback pulito)
+    try:
+        with get_conn() as conn:
             conn.execute('ALTER TABLE clients ADD COLUMN "Indirizzo Scarico" TEXT')
-        except Exception:
-            pass  # Colonna già presente
+    except Exception:
+        pass  # Colonna già presente - va bene
 
+    # Creazione tabelle in transazione separata
+    with get_conn() as conn:
         conn.execute(f"""
             CREATE TABLE IF NOT EXISTS client_delivery_addresses (
                 id {_pk()},

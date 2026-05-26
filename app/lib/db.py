@@ -10,6 +10,7 @@ Backup: ../backups/ (copie del file .db, rotazione automatica).
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import sqlite3
@@ -102,21 +103,76 @@ NUMERIC_COLS = {
 
 
 # ----------------------------------------------------------------------
+# Database URL: se impostato usa PostgreSQL (Supabase), altrimenti SQLite locale
+# ----------------------------------------------------------------------
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+
+class _PgConnWrapper:
+    """Adatta psycopg2 all'API sqlite3 usata nel codice (conn.execute, row dict-like, ecc.)."""
+
+    def __init__(self, conn):
+        import psycopg2.extras
+        self._conn = conn
+        self._cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    def execute(self, sql: str, params=None):
+        # SQLite usa ? come placeholder, psycopg2 usa %s
+        pg_sql = sql.replace("?", "%s")
+        if params is not None:
+            self._cur.execute(pg_sql, list(params))
+        else:
+            self._cur.execute(pg_sql)
+        return self._cur
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        try:
+            self._cur.close()
+        except Exception:
+            pass
+        self._conn.close()
+
+
+# ----------------------------------------------------------------------
 # Connessione
 # ----------------------------------------------------------------------
 @contextmanager
 def get_conn():
-    """Apre connessione SQLite. Da usare con `with get_conn() as c:`."""
-    conn = sqlite3.connect(str(DB_FILE))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    # NB: lasciamo journal mode di default (DELETE).
-    # WAL non funziona su OneDrive/mount di rete.
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+    """Apre connessione al DB.
+    - Se DATABASE_URL è impostato: usa PostgreSQL (Supabase)
+    - Altrimenti: usa SQLite locale
+    """
+    if DATABASE_URL:
+        try:
+            import psycopg2
+        except ImportError:
+            raise RuntimeError(
+                "psycopg2 non installato. Aggiungi 'psycopg2-binary' a requirements.txt"
+            )
+        conn = psycopg2.connect(DATABASE_URL)
+        wrapper = _PgConnWrapper(conn)
+        try:
+            yield wrapper
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            wrapper.close()
+    else:
+        conn = sqlite3.connect(str(DB_FILE))
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        # NB: lasciamo journal mode di default (DELETE).
+        # WAL non funziona su OneDrive/mount di rete.
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
 
 
 def _quote(name: str) -> str:
@@ -175,17 +231,31 @@ def init_db() -> None:
         """)
 
         # Audit log
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS audit_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                user TEXT,
-                action TEXT,
-                sheet TEXT,
-                row_id TEXT,
-                details TEXT
-            )
-        """)
+        # SQLite usa INTEGER PRIMARY KEY AUTOINCREMENT, PostgreSQL usa SERIAL
+        if DATABASE_URL:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id SERIAL PRIMARY KEY,
+                    timestamp TEXT NOT NULL,
+                    "user" TEXT,
+                    action TEXT,
+                    sheet TEXT,
+                    row_id TEXT,
+                    details TEXT
+                )
+            """)
+        else:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    user TEXT,
+                    action TEXT,
+                    sheet TEXT,
+                    row_id TEXT,
+                    details TEXT
+                )
+            """)
         conn.execute("CREATE INDEX IF NOT EXISTS ix_audit_ts ON audit_log(timestamp)")
 
         # Tabella utenti (Fase 3, pre-creata)
@@ -228,7 +298,9 @@ def read_sheet(sheet_name: str) -> pd.DataFrame:
     columns = SCHEMAS[sheet_name]
     cols_sql = ", ".join(_quote(c) for c in columns)
     with get_conn() as conn:
-        df = pd.read_sql_query(f"SELECT {cols_sql} FROM {_quote(table)}", conn)
+        # pandas vuole la connessione nativa (non il wrapper)
+        raw = conn._conn if hasattr(conn, "_conn") else conn
+        df = pd.read_sql_query(f"SELECT {cols_sql} FROM {_quote(table)}", raw)
     # tipi: pandas decide. ID resta stringa.
     if not df.empty:
         df[columns[0]] = df[columns[0]].astype(str)
@@ -247,7 +319,10 @@ def clear_cache() -> None:
 # Backup
 # ----------------------------------------------------------------------
 def make_backup() -> Optional[Path]:
-    """Copia di sicurezza del file .db. Tiene gli ultimi 20."""
+    """Copia di sicurezza del file .db. Tiene gli ultimi 20.
+    In modalità PostgreSQL il backup file non è applicabile, viene saltato."""
+    if DATABASE_URL:
+        return None  # su Supabase il backup lo gestisce Supabase
     if not DB_FILE.exists():
         return None
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -600,11 +675,15 @@ def log_action(action: str, sheet: str, row_id: str = "", details: str = "") -> 
 
 def read_audit_log(limit: int = 500) -> pd.DataFrame:
     with get_conn() as conn:
-        df = pd.read_sql_query(
+        raw = conn._conn if hasattr(conn, "_conn") else conn
+        sql = (
+            'SELECT timestamp, "user", action, sheet, row_id, details '
+            "FROM audit_log ORDER BY id DESC LIMIT %s"
+            if DATABASE_URL else
             "SELECT timestamp, user, action, sheet, row_id, details "
-            "FROM audit_log ORDER BY id DESC LIMIT ?",
-            conn, params=(limit,)
+            "FROM audit_log ORDER BY id DESC LIMIT ?"
         )
+        df = pd.read_sql_query(sql, raw, params=(limit,))
     return df
 
 

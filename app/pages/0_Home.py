@@ -7,6 +7,29 @@ import pandas as pd
 auth.require_login()
 
 u = auth.get_current_user()
+
+# --- Navigazione rapida (utile su mobile) ---
+st.markdown("#### 📱 Navigazione rapida")
+cols = st.columns(4)
+nav_items = [
+    ("pages/1_Dashboard.py",        "📊 Dashboard"),
+    ("pages/2_Fornitori.py",        "🏭 Fornitori"),
+    ("pages/3_Clienti.py",          "👥 Clienti"),
+    ("pages/4_Offerte.py",          "📋 Offerte"),
+    ("pages/5_Bid.py",              "🎯 Bid"),
+    ("pages/7_Matching.py",         "🔗 Matching"),
+    ("pages/8_Margini.py",          "💰 Margini"),
+    ("pages/11_Spedizioni.py",      "🚢 Spedizioni"),
+    ("pages/12_Ordini.py",          "📦 Ordini"),
+    ("pages/13_Storico.py",         "📜 Storico"),
+    ("pages/6_Impostazioni.py",     "⚙️ Impostazioni"),
+]
+for i, (page, label) in enumerate(nav_items):
+    with cols[i % 4]:
+        st.page_link(page, label=label, use_container_width=True)
+
+st.markdown("---")
+
 st.markdown(
     f'<div class="page-title">Benvenuto, {u["username"].capitalize()}</div>'
     '<div class="page-sub">Piattaforma di trading proteine - fornitori, clienti, '

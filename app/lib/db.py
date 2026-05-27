@@ -778,10 +778,14 @@ def _log(action: str, sheet: str, row_id: str = "", details: str = "") -> None:
         user = st.session_state.get("user", "system")
     except Exception:
         pass
+    ph = "%s" if DATABASE_URL else "?"
+    sql = (
+        f'INSERT INTO audit_log (timestamp, "user", action, sheet, row_id, details) '
+        f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})"
+    )
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO audit_log (timestamp, user, action, sheet, row_id, details) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            sql,
             (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
              user, action, sheet, row_id, (details or "")[:500])
         )

@@ -14,6 +14,13 @@ import pandas as pd
 
 from lib.db import get_conn, DATABASE_URL
 
+
+def _sql(query: str) -> str:
+    """Converte placeholder ? → %s per PostgreSQL, li lascia ? per SQLite."""
+    if DATABASE_URL:
+        return query.replace("?", "%s")
+    return query
+
 # Giorni della settimana
 DAYS = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]
 DAYS_LABEL = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
@@ -102,15 +109,15 @@ def create_week(week_number: int, year: int, supplier: str = "", notes: str = ""
     with get_conn() as conn:
         if DATABASE_URL:
             cur = conn.execute(
-                "INSERT INTO fresh_weeks (week_number, year, supplier, upload_date, notes) "
-                "VALUES (?, ?, ?, ?, ?) RETURNING id",
+                _sql("INSERT INTO fresh_weeks (week_number, year, supplier, upload_date, notes) "
+                "VALUES (?, ?, ?, ?, ?) RETURNING id"),
                 (week_number, year, supplier, ts, notes)
             )
             return cur.fetchone()[0]
         else:
             conn.execute(
-                "INSERT INTO fresh_weeks (week_number, year, supplier, upload_date, notes) "
-                "VALUES (?, ?, ?, ?, ?)",
+                _sql("INSERT INTO fresh_weeks (week_number, year, supplier, upload_date, notes) "
+                "VALUES (?, ?, ?, ?, ?)"),
                 (week_number, year, supplier, ts, notes)
             )
             raw = conn
@@ -120,9 +127,9 @@ def create_week(week_number: int, year: int, supplier: str = "", notes: str = ""
 
 def delete_week(week_id: int) -> None:
     with get_conn() as conn:
-        conn.execute("DELETE FROM fresh_availability WHERE week_id = ?", (week_id,))
-        conn.execute("DELETE FROM fresh_orders_fresco WHERE week_id = ?", (week_id,))
-        conn.execute("DELETE FROM fresh_weeks WHERE id = ?", (week_id,))
+        conn.execute(_sql("DELETE FROM fresh_availability WHERE week_id = ?"), (week_id,))
+        conn.execute(_sql("DELETE FROM fresh_orders_fresco WHERE week_id = ?"), (week_id,))
+        conn.execute(_sql("DELETE FROM fresh_weeks WHERE id = ?"), (week_id,))
 
 
 # -----------------------------------------------------------------------
@@ -239,14 +246,14 @@ def parse_prevision_excel(file_bytes: bytes) -> pd.DataFrame:
 def save_availability(week_id: int, df: pd.DataFrame) -> int:
     """Salva il DataFrame disponibilità. Prima cancella righe esistenti per la settimana."""
     with get_conn() as conn:
-        conn.execute("DELETE FROM fresh_availability WHERE week_id = ?", (week_id,))
+        conn.execute(_sql("DELETE FROM fresh_availability WHERE week_id = ?"), (week_id,))
         n = 0
         for _, r in df.iterrows():
             conn.execute(
-                "INSERT INTO fresh_availability "
+                _sql("INSERT INTO fresh_availability "
                 "(week_id, product_code, product_name, category, format, plant, um, "
                 "lun_qty, mar_qty, mer_qty, gio_qty, ven_qty, sab_qty, dom_qty) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
                 (week_id, r.get("product_code"), r.get("product_name"),
                  r.get("category"), r.get("format"), r.get("plant"), r.get("um"),
                  float(r.get("lun_qty") or 0), float(r.get("mar_qty") or 0),
@@ -263,7 +270,7 @@ def get_availability(week_id: int) -> pd.DataFrame:
     with get_conn() as conn:
         raw = conn._conn if hasattr(conn, "_conn") else conn
         return pd.read_sql_query(
-            "SELECT * FROM fresh_availability WHERE week_id = ? ORDER BY category, product_name",
+            _sql("SELECT * FROM fresh_availability WHERE week_id = ? ORDER BY category, product_name"),
             raw, params=(week_id,)
         )
 
@@ -276,10 +283,10 @@ def add_fresh_order(week_id: int, data: dict, user: str = "system") -> int:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO fresh_orders_fresco "
+            _sql("INSERT INTO fresh_orders_fresco "
             "(week_id, client, product_code, product_name, product_type, "
             "load_day, load_date, quantity, um, price, delivery_notes, status, created_at, created_by) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
             (week_id,
              data.get("client", ""),
              data.get("product_code", ""),
@@ -299,10 +306,10 @@ def add_fresh_order(week_id: int, data: dict, user: str = "system") -> int:
 def update_fresh_order(order_id: int, data: dict) -> None:
     with get_conn() as conn:
         conn.execute(
-            "UPDATE fresh_orders_fresco SET "
+            _sql("UPDATE fresh_orders_fresco SET "
             "client=?, product_code=?, product_name=?, product_type=?, "
             "load_day=?, load_date=?, quantity=?, um=?, price=?, delivery_notes=?, status=? "
-            "WHERE id=?",
+            "WHERE id=?"),
             (data.get("client", ""),
              data.get("product_code", ""),
              data.get("product_name", ""),
@@ -320,7 +327,7 @@ def update_fresh_order(order_id: int, data: dict) -> None:
 
 def delete_fresh_order(order_id: int) -> None:
     with get_conn() as conn:
-        conn.execute("DELETE FROM fresh_orders_fresco WHERE id = ?", (order_id,))
+        conn.execute(_sql("DELETE FROM fresh_orders_fresco WHERE id = ?"), (order_id,))
 
 
 def get_fresh_orders(week_id: int) -> pd.DataFrame:
@@ -328,8 +335,8 @@ def get_fresh_orders(week_id: int) -> pd.DataFrame:
     with get_conn() as conn:
         raw = conn._conn if hasattr(conn, "_conn") else conn
         return pd.read_sql_query(
-            "SELECT * FROM fresh_orders_fresco WHERE week_id = ? "
-            "ORDER BY load_day, client",
+            _sql("SELECT * FROM fresh_orders_fresco WHERE week_id = ? "
+            "ORDER BY load_day, client"),
             raw, params=(week_id,)
         )
 

@@ -16,7 +16,14 @@ from typing import Optional
 import bcrypt
 import streamlit as st
 
-from lib.db import get_conn
+from lib.db import get_conn, DATABASE_URL
+
+
+def _sql(query: str) -> str:
+    """Converte placeholder ? → %s per PostgreSQL."""
+    if DATABASE_URL:
+        return query.replace("?", "%s")
+    return query
 
 
 # ----------------------------------------------------------------------
@@ -51,8 +58,8 @@ def has_users() -> bool:
 def get_user(username: str) -> Optional[dict]:
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT username, password_hash, role, created_at, last_login, active "
-            "FROM users WHERE username = ?",
+            _sql("SELECT username, password_hash, role, created_at, last_login, active "
+            "FROM users WHERE username = ?"),
             (username.strip().lower(),)
         ).fetchone()
     return dict(row) if row else None
@@ -76,8 +83,8 @@ def create_user(username: str, password: str, role: str = "user") -> bool:
         return False
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO users (username, password_hash, role, created_at, active) "
-            "VALUES (?, ?, ?, ?, 1)",
+            _sql("INSERT INTO users (username, password_hash, role, created_at, active) "
+            "VALUES (?, ?, ?, ?, 1)"),
             (username, hash_password(password), role,
              datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         )
@@ -92,21 +99,22 @@ def update_user(username: str,
     if not get_user(username):
         return False
     fields, params = [], []
+    ph = "%s" if DATABASE_URL else "?"
     if password is not None:
-        fields.append("password_hash = ?")
+        fields.append(f"password_hash = {ph}")
         params.append(hash_password(password))
     if role is not None:
-        fields.append("role = ?")
+        fields.append(f"role = {ph}")
         params.append(role)
     if active is not None:
-        fields.append("active = ?")
+        fields.append(f"active = {ph}")
         params.append(1 if active else 0)
     if not fields:
         return False
     params.append(username)
     with get_conn() as conn:
         conn.execute(
-            f"UPDATE users SET {', '.join(fields)} WHERE username = ?",
+            f"UPDATE users SET {', '.join(fields)} WHERE username = {ph}",
             params
         )
     return True
@@ -116,7 +124,7 @@ def delete_user(username: str) -> bool:
     """Cancella fisicamente un utente. Meglio update_user(active=False)."""
     username = username.strip().lower()
     with get_conn() as conn:
-        cur = conn.execute("DELETE FROM users WHERE username = ?", (username,))
+        cur = conn.execute(_sql("DELETE FROM users WHERE username = ?"), (username,))
         return cur.rowcount > 0
 
 
@@ -135,7 +143,7 @@ def authenticate(username: str, password: str) -> Optional[dict]:
     # aggiorna last_login
     with get_conn() as conn:
         conn.execute(
-            "UPDATE users SET last_login = ? WHERE username = ?",
+            _sql("UPDATE users SET last_login = ? WHERE username = ?"),
             (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
              user["username"])
         )

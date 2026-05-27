@@ -94,6 +94,26 @@ def sidebar_user():
             st.rerun()
         st.markdown("---")
 
+        # Badge alert
+        try:
+            from lib.db import get_alerts
+            _alerts = get_alerts()
+            if _alerts:
+                n_err  = sum(1 for a in _alerts if a["level"] == "error")
+                n_warn = sum(1 for a in _alerts if a["level"] == "warning")
+                parts = []
+                if n_err:   parts.append(f"🔴 {n_err}")
+                if n_warn:  parts.append(f"🟡 {n_warn}")
+                st.markdown(
+                    f"<div style='background:#2a1a1a; border:1px solid #ff4b4b; "
+                    f"border-radius:6px; padding:6px 10px; font-size:0.78rem; "
+                    f"color:#ff9999; text-align:center; margin-bottom:8px'>"
+                    f"⚠️ Alerts: {' · '.join(parts)}</div>",
+                    unsafe_allow_html=True,
+                )
+        except Exception:
+            pass
+
         # Mini calendario con eventi agenda
         try:
             from lib.db import get_agenda_events
@@ -139,6 +159,7 @@ pages = [
     st.Page("pages/15_Carico_Camion.py",   title="Carico Camion",   icon="🚛"),
     st.Page("pages/16_Trasportatori.py",   title="Trasportatori",   icon="🚚"),
     st.Page("pages/17_Agenda.py",           title="Agenda",          icon="📅"),
+    st.Page("pages/18_Prezzi.py",           title="Storico Prezzi",  icon="📈"),
     st.Page("pages/6_Impostazioni.py",     title="Impostazioni",    icon="⚙️"),
 ]
 

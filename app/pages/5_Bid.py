@@ -71,7 +71,7 @@ st.dataframe(
 )
 
 st.markdown("##### Azioni su un bid esistente")
-col_id, col_b1, col_b2 = st.columns([3, 1, 1])
+col_id, col_b1, col_b2, col_b3 = st.columns([3, 1, 1, 1])
 with col_id:
     sel_id = st.selectbox("ID bid",
         options=[""] + view["Bid ID"].astype(str).tolist() if not view.empty else [""],
@@ -82,6 +82,21 @@ with col_b1:
 with col_b2:
     if st.button("🗑️ Cancella", use_container_width=True, disabled=not sel_id):
         st.session_state["bid_mode"] = "delete"; st.session_state["bid_edit_id"] = sel_id
+with col_b3:
+    if sel_id:
+        try:
+            from lib.pdf_generator import generate_bid_pdf
+            row_data = df[df["Bid ID"].astype(str) == str(sel_id)]
+            if not row_data.empty:
+                pdf_bytes = generate_bid_pdf(row_data.iloc[0].to_dict())
+                st.download_button(
+                    "📄 PDF", data=pdf_bytes,
+                    file_name=f"bid_{sel_id}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+        except Exception as ex:
+            st.caption(f"PDF err: {ex}")
 
 
 mode = st.session_state.get("bid_mode")

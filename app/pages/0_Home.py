@@ -1,4 +1,4 @@
-"""Home page - KPI e benvenuto."""
+"""Home page - KPI, alert e benvenuto."""
 import streamlit as st
 from lib import auth
 from lib.theme import kpi_card
@@ -8,7 +8,41 @@ auth.require_login()
 
 u = auth.get_current_user()
 
-# --- Navigazione rapida (utile su mobile) ---
+# -----------------------------------------------------------------------
+# PANNELLO ALERT
+# -----------------------------------------------------------------------
+try:
+    from lib.db import get_alerts
+    alerts = get_alerts()
+except Exception:
+    alerts = []
+
+if alerts:
+    n_errors   = sum(1 for a in alerts if a["level"] == "error")
+    n_warnings = sum(1 for a in alerts if a["level"] == "warning")
+
+    badge_parts = []
+    if n_errors:
+        badge_parts.append(f"🔴 {n_errors} critical")
+    if n_warnings:
+        badge_parts.append(f"🟡 {n_warnings} warning")
+
+    with st.expander(f"⚠️ Alerts — {' · '.join(badge_parts)}", expanded=True):
+        for a in alerts:
+            color = "#ff4b4b" if a["level"] == "error" else "#ffa500"
+            st.markdown(
+                f"<div style='border-left:3px solid {color}; padding:6px 10px; "
+                f"margin-bottom:6px; background:#1a1a2e; border-radius:4px;'>"
+                f"<span style='font-weight:600; color:{color}'>{a['icon']} {a['title']}</span>"
+                f"<br><span style='font-size:0.8rem; color:#aaa'>{a['detail']}</span></div>",
+                unsafe_allow_html=True,
+            )
+
+st.markdown("---")
+
+# -----------------------------------------------------------------------
+# NAVIGAZIONE RAPIDA
+# -----------------------------------------------------------------------
 st.markdown("#### 📱 Navigazione rapida")
 cols = st.columns(4)
 nav_items = [
@@ -25,6 +59,8 @@ nav_items = [
     ("pages/14_Ordini_Fresco.py",   "🥩 Ordini Fresco"),
     ("pages/15_Carico_Camion.py",   "🚛 Carico Camion"),
     ("pages/16_Trasportatori.py",   "🚚 Trasportatori"),
+    ("pages/17_Agenda.py",          "📅 Agenda"),
+    ("pages/18_Prezzi.py",          "📈 Storico Prezzi"),
     ("pages/6_Impostazioni.py",     "⚙️ Impostazioni"),
 ]
 for i, (page, label) in enumerate(nav_items):
@@ -35,36 +71,14 @@ st.markdown("---")
 
 st.markdown(
     f'<div class="page-title">Benvenuto, {u["username"].capitalize()}</div>'
-    '<div class="page-sub">Piattaforma di trading proteine - fornitori, clienti, '
+    '<div class="page-sub">Piattaforma di trading proteine — fornitori, clienti, '
     'offerte e bid in un unico posto.</div>',
     unsafe_allow_html=True,
 )
 
-col1, col2 = st.columns([2, 1])
-with col1:
-    st.markdown("### Come iniziare")
-    st.markdown(
-        """
-        Usa il **menu a sinistra** per navigare tra le sezioni:
-
-        - **Dashboard** — numeri chiave e grafici in tempo reale
-        - **Fornitori** — anagrafica completa, ricerca e modifica
-        - **Clienti** — anagrafica clienti
-        - **Offerte** — offerte ricevute dai fornitori
-        - **Bid** — richieste dei clienti
-        - **Impostazioni** — backup, gestione utenti (solo admin), refresh dati
-        """
-    )
-
-with col2:
-    st.info(
-        "**Suggerimento**\n\n"
-        "Puoi esportare i dati in Excel quando vuoi dalla pagina "
-        "Impostazioni: utile per inviare report via email."
-    )
-
-st.markdown("---")
-
+# -----------------------------------------------------------------------
+# KPI
+# -----------------------------------------------------------------------
 try:
     from lib.data import get_kpis
     kpis = get_kpis()
@@ -91,6 +105,6 @@ except Exception as e:
 
 st.markdown(
     "<div style='text-align:center; color:#94a3b8; font-size:0.8rem; "
-    "margin-top:60px;'>v2.0 - Build per Nicolas Colombo - Maggio 2026</div>",
+    "margin-top:60px;'>v2.1 - Build per Nicolas Colombo - Maggio 2026</div>",
     unsafe_allow_html=True,
 )

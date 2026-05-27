@@ -1182,6 +1182,77 @@ def update_agenda_event(event_id: int, title: str, event_date: str,
         return cur.rowcount > 0
 
 
+# ======================================================================
+# Alert & notifiche
+# ======================================================================
+def get_alerts() -> list[dict]:
+    """
+    Ritorna lista di alert attivi:
+    - Offerte con Load Ready Date scaduta
+    - Bid con Need By Date scaduto e status aperto
+    - Spedizioni con ETA passato e non consegnate
+    """
+    from datetime import date as _date
+    today = _date.today().strftime("%Y-%m-%d")
+    alerts = []
+
+    # --- Offerte scadute ---
+    try:
+        offers = read_sheet("OFFERS")
+        if not offers.empty and "Load Ready Date" in offers.columns:
+            col = offers["Load Ready Date"].astype(str).str.strip()
+            mask = col.notna() & (col != "") & (col != "nan") & (col < today)
+            for _, r in offers[mask].iterrows():
+                alerts.append({
+                    "level": "warning", "category": "offer", "icon": "📋",
+                    "title": f"Offer expired: {r.get('Offer ID', '')}",
+                    "detail": (f"{r.get('Supplier', '')} · {r.get('Product', '')} · "
+                               f"Load: {r.get('Load Ready Date', '')}"),
+                })
+    except Exception:
+        pass
+
+    # --- Bid scaduti (Need By Date < oggi, status aperto/vuoto) ---
+    try:
+        bids = read_sheet("BIDS")
+        if not bids.empty and "Need By Date" in bids.columns:
+            col  = bids["Need By Date"].astype(str).str.strip()
+            stat = bids.get("Status", pd.Series([""] * len(bids))).fillna("").astype(str).str.lower()
+            open_statuses = {"", "open", "pending", "active"}
+            mask = (col.notna() & (col != "") & (col != "nan") & (col < today)
+                    & stat.isin(open_statuses))
+            for _, r in bids[mask].iterrows():
+                alerts.append({
+                    "level": "error", "category": "bid", "icon": "🎯",
+                    "title": f"Bid overdue: {r.get('Bid ID', '')}",
+                    "detail": (f"{r.get('Client', '')} · {r.get('Product', '')} · "
+                               f"Need by: {r.get('Need By Date', '')}"),
+                })
+    except Exception:
+        pass
+
+    # --- Spedizioni in ritardo (ETA < oggi, non consegnate) ---
+    try:
+        ships = read_sheet("SHIPMENTS")
+        if not ships.empty and "ETA" in ships.columns:
+            col  = ships["ETA"].astype(str).str.strip()
+            stat = ships.get("Status", pd.Series([""] * len(ships))).fillna("").astype(str).str.lower()
+            done = {"delivered", "completed", "arrived"}
+            mask = (col.notna() & (col != "") & (col != "nan") & (col < today)
+                    & ~stat.isin(done))
+            for _, r in ships[mask].iterrows():
+                alerts.append({
+                    "level": "error", "category": "shipment", "icon": "🚢",
+                    "title": f"Shipment delayed: {r.get('Shipment ID', '')}",
+                    "detail": (f"{r.get('Client', '')} · {r.get('Product', '')} · "
+                               f"ETA: {r.get('ETA', '')}"),
+                })
+    except Exception:
+        pass
+
+    return alerts
+
+
 def export_to_excel(dest_path: Optional[Path] = None) -> Path:
     """Genera un .xlsx con tutte le tabelle. Default: ../export_<timestamp>.xlsx"""
     if dest_path is None:

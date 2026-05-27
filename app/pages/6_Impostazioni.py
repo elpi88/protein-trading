@@ -171,6 +171,119 @@ if auth.is_admin():
     st.markdown("---")
 
 # ---------------------------------------------------------------------
+# Import Excel diretto
+# ---------------------------------------------------------------------
+st.markdown("### 📥 Import dati da Excel")
+st.markdown(
+    "Carica un file `.xlsx` con righe di **Fornitori** o **Clienti** "
+    "e importale in blocco nel database."
+)
+
+import pandas as pd
+from lib.data import read_sheet, add_row, next_id
+
+import_type = st.radio("Tipo di dati da importare", ["Fornitori", "Clienti"], horizontal=True)
+sheet_map  = {"Fornitori": "SUPPLIERS_CLEAN", "Clienti": "CLIENTS"}
+id_col_map = {"Fornitori": "Supplier ID", "Clienti": "Client ID"}
+SHEET_IMP  = sheet_map[import_type]
+ID_COL     = id_col_map[import_type]
+
+uploaded = st.file_uploader(
+    "Carica file Excel (.xlsx)", type=["xlsx"],
+    help="Il file deve avere una riga di intestazione. Le colonne non riconosciute vengono ignorate."
+)
+
+if uploaded:
+    try:
+        xl = pd.ExcelFile(uploaded)
+        sheet_names = xl.sheet_names
+        sel_sheet = st.selectbox("Foglio Excel da importare", sheet_names)
+        raw = xl.parse(sel_sheet)
+        raw.columns = raw.columns.astype(str).str.strip()
+
+        from lib.db import SCHEMAS
+        target_cols = SCHEMAS[SHEET_IMP]
+
+        # Mappatura automatica colonne (case-insensitive)
+        auto_map = {}
+        raw_lower = {c.lower(): c for c in raw.columns}
+        for tc in target_cols[1:]:  # salta ID
+            if tc.lower() in raw_lower:
+                auto_map[tc] = raw_lower[tc.lower()]
+
+        st.markdown(f"**{len(raw)} righe trovate** nel foglio. "
+                    f"Colonne riconosciute: **{len(auto_map)}/{len(target_cols)-1}**")
+
+        # Mappatura manuale per colonne non trovate
+        with st.expander("🔧 Mappatura colonne (opzionale)", expanded=len(auto_map) < 3):
+            st.caption("Associa le colonne del tuo Excel alle colonne del database.")
+            col_opts = ["(ignora)"] + list(raw.columns)
+            manual_map = {}
+            cols_grid = st.columns(2)
+            for i, tc in enumerate(target_cols[1:]):
+                default = auto_map.get(tc, "(ignora)")
+                default_idx = col_opts.index(default) if default in col_opts else 0
+                with cols_grid[i % 2]:
+                    sel = st.selectbox(tc, col_opts, index=default_idx,
+                                       key=f"map_{tc}")
+                    if sel != "(ignora)":
+                        manual_map[tc] = sel
+
+        if not manual_map:
+            st.warning("Mappa almeno una colonna per poter importare.")
+        else:
+            # Anteprima prime 5 righe
+            preview_df = pd.DataFrame()
+            for tc, xc in manual_map.items():
+                preview_df[tc] = raw[xc].astype(str).replace("nan", "")
+            st.markdown("**Anteprima (prime 5 righe):**")
+            st.dataframe(preview_df.head(5), use_container_width=True, hide_index=True)
+
+            skip_dupes = st.checkbox("Salta righe con Company Name già presente", value=True)
+            existing = read_sheet(SHEET_IMP)
+
+            if st.button(f"⬆️ Importa {len(raw)} righe in {import_type}", type="primary"):
+                imported = 0
+                skipped  = 0
+                errors   = 0
+                existing_names = set()
+                if skip_dupes and not existing.empty and "Company Name" in existing.columns:
+                    existing_names = set(existing["Company Name"].astype(str).str.lower())
+
+                for _, row_raw in raw.iterrows():
+                    try:
+                        new_row = {ID_COL: next_id(SHEET_IMP)}
+                        for tc, xc in manual_map.items():
+                            val = row_raw.get(xc, "")
+                            new_row[tc] = "" if str(val) == "nan" else str(val)
+
+                        cname = new_row.get("Company Name", "").strip()
+                        if not cname:
+                            skipped += 1
+                            continue
+                        if skip_dupes and cname.lower() in existing_names:
+                            skipped += 1
+                            continue
+
+                        add_row(SHEET_IMP, new_row)
+                        existing_names.add(cname.lower())
+                        imported += 1
+                    except Exception:
+                        errors += 1
+
+                if imported:
+                    st.success(f"✅ Importati **{imported}** record. "
+                               f"Saltati: {skipped}. Errori: {errors}.")
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.warning(f"Nessun record importato. Saltati: {skipped}, Errori: {errors}.")
+    except Exception as e:
+        st.error(f"Errore nella lettura del file: {e}")
+
+st.markdown("---")
+
+# ---------------------------------------------------------------------
 # Info app
 # ---------------------------------------------------------------------
 st.markdown("### App")

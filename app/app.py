@@ -94,6 +94,18 @@ def sidebar_user():
             st.rerun()
         st.markdown("---")
 
+        # Barra ricerca globale
+        with st.form("sidebar_search", clear_on_submit=True):
+            sc1, sc2 = st.columns([4, 1])
+            with sc1:
+                sq = st.text_input("Cerca", placeholder="Cerca...",
+                                   label_visibility="collapsed")
+            with sc2:
+                sb = st.form_submit_button("🔍")
+            if sb and sq:
+                st.session_state["global_search_query"] = sq
+                st.switch_page("pages/19_Cerca.py")
+
         # Badge alert
         try:
             from lib.db import get_alerts
@@ -160,6 +172,7 @@ pages = [
     st.Page("pages/16_Trasportatori.py",   title="Trasportatori",   icon="🚚"),
     st.Page("pages/17_Agenda.py",           title="Agenda",          icon="📅"),
     st.Page("pages/18_Prezzi.py",           title="Storico Prezzi",  icon="📈"),
+    st.Page("pages/19_Cerca.py",            title="Cerca",           icon="🔍"),
     st.Page("pages/6_Impostazioni.py",     title="Impostazioni",    icon="⚙️"),
 ]
 

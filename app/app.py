@@ -6,6 +6,7 @@ import streamlit as st
 
 from lib.theme import apply_theme
 from lib import auth
+from lib.sidebar_calendar import render_sidebar_calendar
 
 st.set_page_config(
     page_title="Protein Trading - Piattaforma",
@@ -93,6 +94,22 @@ def sidebar_user():
             st.rerun()
         st.markdown("---")
 
+        # Mini calendario con eventi agenda
+        try:
+            from lib.db import get_agenda_events
+            from datetime import date
+            import calendar as _cal
+            year = st.session_state.get("cal_year", date.today().year)
+            month = st.session_state.get("cal_month", date.today().month)
+            first = date(year, month, 1)
+            last_day = _cal.monthrange(year, month)[1]
+            last = date(year, month, last_day)
+            evdf = get_agenda_events(str(first), str(last))
+            event_dates = set(evdf["event_date"].tolist()) if not evdf.empty else set()
+        except Exception:
+            event_dates = set()
+        render_sidebar_calendar(event_dates)
+
 
 # --- Setup primo admin ---
 if not auth.has_users():
@@ -121,6 +138,7 @@ pages = [
     st.Page("pages/14_Ordini_Fresco.py",   title="Ordini Fresco",   icon="🥩"),
     st.Page("pages/15_Carico_Camion.py",   title="Carico Camion",   icon="🚛"),
     st.Page("pages/16_Trasportatori.py",   title="Trasportatori",   icon="🚚"),
+    st.Page("pages/17_Agenda.py",           title="Agenda",          icon="📅"),
     st.Page("pages/6_Impostazioni.py",     title="Impostazioni",    icon="⚙️"),
 ]
 

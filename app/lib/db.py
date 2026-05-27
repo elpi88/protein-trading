@@ -389,6 +389,24 @@ def init_db() -> None:
     # Seed paesi: inserisce tutti i paesi del mondo se non già presenti
     _seed_countries()
 
+    # Migrazione 4: tabella agenda_events
+    _id_col = "id SERIAL PRIMARY KEY" if DATABASE_URL else "id INTEGER PRIMARY KEY AUTOINCREMENT"
+    with get_conn() as conn:
+        conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS agenda_events (
+                {_id_col},
+                title TEXT NOT NULL,
+                event_date TEXT NOT NULL,
+                time_start TEXT,
+                time_end TEXT,
+                location TEXT,
+                description TEXT,
+                category TEXT DEFAULT 'meeting',
+                created_by TEXT,
+                created_at TEXT
+            )
+        """)
+
 
 # ----------------------------------------------------------------------
 # Cache (compatibile con Streamlit; se non in Streamlit, no-op)
@@ -1089,6 +1107,81 @@ def merge_records(sheet: str, keep_id: str, drop_id: str,
 # ======================================================================
 # Esporta tutto in Excel (per email / backup manuale)
 # ======================================================================
+# ======================================================================
+# Agenda events CRUD
+# ======================================================================
+def add_agenda_event(title: str, event_date: str, time_start: str = "",
+                     time_end: str = "", location: str = "",
+                     description: str = "", category: str = "meeting",
+                     user: str = "system") -> int:
+    """Aggiunge un evento agenda. Ritorna l'id creato."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        if DATABASE_URL:
+            cur = conn.execute(
+                "INSERT INTO agenda_events (title, event_date, time_start, time_end, "
+                "location, description, category, created_by, created_at) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                (title, event_date, time_start, time_end,
+                 location, description, category, user, ts)
+            )
+            return cur.fetchone()[0]
+        else:
+            conn.execute(
+                "INSERT INTO agenda_events (title, event_date, time_start, time_end, "
+                "location, description, category, created_by, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (title, event_date, time_start, time_end,
+                 location, description, category, user, ts)
+            )
+            raw = conn._conn if hasattr(conn, "_conn") else conn
+            return raw.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def get_agenda_events(date_from: str = "", date_to: str = "") -> pd.DataFrame:
+    """Ritorna eventi agenda, opzionalmente filtrati per intervallo date."""
+    ph = "%s" if DATABASE_URL else "?"
+    with get_conn() as conn:
+        raw = conn._conn if hasattr(conn, "_conn") else conn
+        if date_from and date_to:
+            sql = (f"SELECT * FROM agenda_events WHERE event_date >= {ph} "
+                   f"AND event_date <= {ph} ORDER BY event_date, time_start")
+            return pd.read_sql_query(sql, raw, params=(date_from, date_to))
+        elif date_from:
+            sql = (f"SELECT * FROM agenda_events WHERE event_date >= {ph} "
+                   f"ORDER BY event_date, time_start")
+            return pd.read_sql_query(sql, raw, params=(date_from,))
+        else:
+            return pd.read_sql_query(
+                "SELECT * FROM agenda_events ORDER BY event_date, time_start", raw
+            )
+
+
+def delete_agenda_event(event_id: int) -> bool:
+    ph = "%s" if DATABASE_URL else "?"
+    with get_conn() as conn:
+        cur = conn.execute(
+            f"DELETE FROM agenda_events WHERE id = {ph}", (event_id,)
+        )
+        return cur.rowcount > 0
+
+
+def update_agenda_event(event_id: int, title: str, event_date: str,
+                        time_start: str = "", time_end: str = "",
+                        location: str = "", description: str = "",
+                        category: str = "meeting") -> bool:
+    ph = "%s" if DATABASE_URL else "?"
+    with get_conn() as conn:
+        cur = conn.execute(
+            f"UPDATE agenda_events SET title={ph}, event_date={ph}, time_start={ph}, "
+            f"time_end={ph}, location={ph}, description={ph}, category={ph} "
+            f"WHERE id={ph}",
+            (title, event_date, time_start, time_end,
+             location, description, category, event_id)
+        )
+        return cur.rowcount > 0
+
+
 def export_to_excel(dest_path: Optional[Path] = None) -> Path:
     """Genera un .xlsx con tutte le tabelle. Default: ../export_<timestamp>.xlsx"""
     if dest_path is None:

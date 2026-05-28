@@ -1468,3 +1468,19 @@ def get_missing_docs(entity_type, entity_id):
     df = list_documents(entity_type=entity_type, entity_id=entity_id)
     present = set(df["doc_type"].tolist()) if not df.empty else set()
     return [d for d in required if d not in present]
+
+
+# ======================================================================
+# Export Excel
+# ======================================================================
+
+def export_to_excel(dest_path=None):
+    """Genera un .xlsx con tutte le tabelle. Default: ../export_<timestamp>.xlsx"""
+    if dest_path is None:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dest_path = PROJECT_DIR / f"export_{ts}.xlsx"
+    with pd.ExcelWriter(dest_path, engine="openpyxl") as xl:
+        for sheet in SCHEMAS:
+            df = read_sheet(sheet)
+            df.to_excel(xl, sheet_name=sheet, index=False)
+    return dest_path

@@ -407,6 +407,19 @@ def init_db() -> None:
             )
         """)
 
+    # Migrazione 5: tabella supplier_products (catalogo codici prodotto per fornitore)
+    _id_col = "id SERIAL PRIMARY KEY" if DATABASE_URL else "id INTEGER PRIMARY KEY AUTOINCREMENT"
+    with get_conn() as conn:
+        conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS supplier_products (
+                {_id_col},
+                supplier_name TEXT NOT NULL,
+                product_code  TEXT NOT NULL,
+                product_name  TEXT NOT NULL,
+                UNIQUE(supplier_name, product_code)
+            )
+        """)
+
 
 # ----------------------------------------------------------------------
 # Cache (compatibile con Streamlit; se non in Streamlit, no-op)
@@ -1250,16 +1263,63 @@ def get_alerts() -> list[dict]:
     except Exception:
         pass
 
-    return alerts
 
 
-def export_to_excel(dest_path: Optional[Path] = None) -> Path:
-    """Genera un .xlsx con tutte le tabelle. Default: ../export_<timestamp>.xlsx"""
-    if dest_path is None:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        dest_path = PROJECT_DIR / f"export_{ts}.xlsx"
-    with pd.ExcelWriter(dest_path, engine="openpyxl") as xl:
-        for sheet in SCHEMAS:
-            df = read_sheet(sheet)
-            df.to_excel(xl, sheet_name=sheet, index=False)
-    return dest_path
+# ----------------------------------------------------------------------
+# SUPPLIER PRODUCTS — catalogo codici prodotto per fornitore
+# ----------------------------------------------------------------------
+
+def get_supplier_products(supplier_name=None):
+    """Restituisce il catalogo prodotti. Se supplier_name e' specificato,
+    filtra per quel fornitore."""
+    with get_conn() as conn:
+        if supplier_name:
+            ph = "%s" if DATABASE_URL else "?"
+            rows = conn.execute(
+                "SELECT supplier_name, product_code, product_name "
+                "FROM supplier_products WHERE supplier_name = " + ph + " "
+                "ORDER BY product_code",
+                (supplier_name,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT supplier_name, product_code, product_name "
+                "FROM supplier_products ORDER BY supplier_name, product_code"
+            ).fetchall()
+    return pd.DataFrame(rows, columns=["supplier_name", "product_code", "product_name"])
+
+
+def get_supplier_names_with_products():
+    """Restituisce la lista dei fornitori con prodotti nel catalogo."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT supplier_name FROM supplier_products ORDER BY supplier_name"
+        ).fetchall()
+    return [r[0] for r in rows]
+
+
+def upsert_supplier_products(supplier_name, products):
+    """Inserisce o aggiorna i prodotti di un fornitore.
+    products = lista di (product_code, product_name).
+    Restituisce il numero di righe inserite/aggiornate."""
+    if not products:
+        return 0
+    with get_conn() as conn:
+        count = 0
+        for code, name in products:
+            if DATABASE_URL:
+                conn.execute(
+                    "INSERT INTO supplier_products (supplier_name, product_code, product_name) "
+                    "VALUES (%s, %s, %s) ON CONFLICT (supplier_name, product_code) DO UPDATE "
+                    "SET product_name = EXCLUDED.product_name",
+                    (supplier_name, code, name)
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO supplier_products (supplier_name, product_code, product_name) "
+                    "VALUES (?, ?, ?) ON CONFLICT (supplier_name, product_code) DO UPDATE "
+                    "SET product_name = excluded.product_name",
+                    (supplier_name, code, name)
+                )
+            count += 1
+    return count

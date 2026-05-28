@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from lib.data import read_sheet, add_row, update_row, delete_row, next_id, get_currencies
+from lib.db import get_supplier_products, get_supplier_names_with_products
 from lib.theme import apply_theme, kpi_card
 
 from lib.auth import require_login
@@ -322,7 +323,26 @@ if mode in ("add", "edit"):
             else:
                 client = st.text_input("Client *", value=cur_client)
 
-            product = st.text_input("Product *", value=str(existing.get("Product", "") or ""))
+            # Menu a tendina prodotti per fornitore
+            suppliers_with_products = get_supplier_names_with_products()
+            cur_product = str(existing.get("Product", "") or "")
+            if suppliers_with_products:
+                sup_sel = st.selectbox(
+                    "Fornitore (catalogo prodotti)",
+                    ["— inserimento libero —"] + suppliers_with_products,
+                    key="inv_sup_sel",
+                )
+                if sup_sel != "— inserimento libero —":
+                    prod_df = get_supplier_products(sup_sel)
+                    prod_options = [""] + [f"{r['product_code']} — {r['product_name']}" for _, r in prod_df.iterrows()]
+                    cur_prod_opt = next((o for o in prod_options if cur_product and cur_product in o), "")
+                    prod_idx = prod_options.index(cur_prod_opt) if cur_prod_opt in prod_options else 0
+                    prod_sel = st.selectbox("Product *", prod_options, index=prod_idx, key="inv_prod_sel")
+                    product = prod_sel.split(" — ")[0] if prod_sel and " — " in prod_sel else prod_sel
+                else:
+                    product = st.text_input("Product *", value=cur_product)
+            else:
+                product = st.text_input("Product *", value=cur_product)
             try:
                 qty = st.number_input("Quantity", value=float(existing.get("Quantity") or 0),
                                          step=100.0, format="%.0f")

@@ -7,7 +7,7 @@ from datetime import datetime
 import streamlit as st
 
 from lib.data import DB_FILE, BACKUP_DIR, make_backup, export_to_excel
-from lib.db import DATABASE_URL
+from lib.db import DATABASE_URL, get_supplier_products, get_supplier_names_with_products, upsert_supplier_products
 from lib.theme import apply_theme
 from lib import auth
 
@@ -280,6 +280,72 @@ if uploaded:
                     st.warning(f"Nessun record importato. Saltati: {skipped}, Errori: {errors}.")
     except Exception as e:
         st.error(f"Errore nella lettura del file: {e}")
+
+st.markdown("---")
+
+# ---------------------------------------------------------------------
+# Catalogo prodotti fornitori
+# ---------------------------------------------------------------------
+st.markdown("### 🏷️ Catalogo prodotti per fornitore")
+st.caption("Gestisci i codici prodotto che appaiono nel menu a tendina di Ordini e Ordini Fresco.")
+
+# Form aggiunta singolo prodotto
+with st.expander("➕ Aggiungi prodotto manualmente", expanded=False):
+    with st.form("add_product_form", clear_on_submit=True):
+        pc1, pc2, pc3 = st.columns(3)
+        new_sup  = pc1.text_input("Fornitore *", placeholder="es. Lorfood")
+        new_code = pc2.text_input("Codice prodotto *", placeholder="es. VGP0641")
+        new_name = pc3.text_input("Nome prodotto *", placeholder="es. AGUJA CERDO DESHUESADA")
+        add_prod = st.form_submit_button("💾 Salva prodotto", type="primary")
+    if add_prod:
+        if not new_sup.strip() or not new_code.strip() or not new_name.strip():
+            st.error("Tutti i campi sono obbligatori.")
+        else:
+            n = upsert_supplier_products(new_sup.strip(), [(new_code.strip().upper(), new_name.strip().upper())])
+            if n:
+                st.success(f"✅ Prodotto **{new_code.strip().upper()}** salvato per **{new_sup.strip()}**.")
+                st.rerun()
+
+# Visualizza e cancella prodotti esistenti
+suppliers_list = get_supplier_names_with_products()
+if suppliers_list:
+    sel_sup = st.selectbox("Visualizza catalogo per fornitore", suppliers_list, key="cat_sup_view")
+    prod_df = get_supplier_products(sel_sup)
+    st.caption(f"{len(prod_df)} prodotti · fornitore: **{sel_sup}**")
+
+    # Cerca nel catalogo
+    cat_search = st.text_input("🔍 Cerca nel catalogo", placeholder="Codice o nome...", key="cat_search")
+    if cat_search:
+        mask = (
+            prod_df["product_code"].str.contains(cat_search, case=False, na=False) |
+            prod_df["product_name"].str.contains(cat_search, case=False, na=False)
+        )
+        prod_df = prod_df[mask]
+
+    st.dataframe(
+        prod_df[["product_code","product_name"]].rename(columns={"product_code":"Codice","product_name":"Nome"}),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    # Elimina singolo prodotto
+    if not prod_df.empty:
+        with st.expander("🗑️ Elimina un prodotto dal catalogo", expanded=False):
+            codes = prod_df["product_code"].tolist()
+            del_code = st.selectbox("Seleziona codice da eliminare", codes, key="del_prod_code")
+            if st.button("🗑️ Elimina prodotto", key="del_prod_btn"):
+                from lib.db import get_conn, DATABASE_URL as _DURL
+                ph = "%s" if _DURL else "?"
+                from lib.db import get_conn
+                with get_conn() as conn:
+                    conn.execute(
+                        f"DELETE FROM supplier_products WHERE supplier_name = {ph} AND product_code = {ph}",
+                        (sel_sup, del_code)
+                    )
+                st.success(f"Prodotto {del_code} eliminato.")
+                st.rerun()
+else:
+    st.info("Nessun prodotto nel catalogo. Aggiungine uno manualmente oppure importa con lo script.")
 
 st.markdown("---")
 

@@ -7,6 +7,7 @@ import streamlit as st
 import pandas as pd
 from lib import auth
 from lib.theme import apply_theme
+from lib.db import get_supplier_products, get_supplier_names_with_products
 from lib.fresh_orders import (
     init_fresh_tables, list_weeks, create_week, delete_week,
     parse_prevision_excel, save_availability, get_availability,
@@ -181,7 +182,36 @@ with tab2:
             c1, c2 = st.columns(2)
             client = c1.selectbox("Cliente", cli_list) if cli_list else c1.text_input("Cliente")
 
-            product_name = c2.selectbox("Prodotto", products_list) if products_list else c2.text_input("Prodotto")
+            # Menu a tendina: catalogo fornitore oppure lista disponibilità settimana
+            suppliers_with_products = get_supplier_names_with_products()
+            if suppliers_with_products:
+                sup_fresco = c2.selectbox(
+                    "Fornitore (catalogo)",
+                    ["— lista disponibilità settimana —"] + suppliers_with_products,
+                    key="fresco_sup_sel",
+                )
+                if sup_fresco != "— lista disponibilità settimana —":
+                    prod_df_f = get_supplier_products(sup_fresco)
+                    prod_opts_f = [""] + [f"{r['product_code']} — {r['product_name']}" for _, r in prod_df_f.iterrows()]
+                    prod_sel_f = c2.selectbox("Prodotto *", prod_opts_f, key="fresco_prod_sel")
+                    if prod_sel_f and " — " in prod_sel_f:
+                        product_code = prod_sel_f.split(" — ")[0]
+                        product_name = " — ".join(prod_sel_f.split(" — ")[1:])
+                    else:
+                        product_code = ""
+                        product_name = prod_sel_f or ""
+                elif products_list:
+                    product_name = c2.selectbox("Prodotto *", products_list, key="fresco_prod_avail")
+                    product_code = ""
+                else:
+                    product_name = c2.text_input("Prodotto *", key="fresco_prod_text")
+                    product_code = ""
+            elif products_list:
+                product_name = c2.selectbox("Prodotto", products_list)
+                product_code = ""
+            else:
+                product_name = c2.text_input("Prodotto")
+                product_code = ""
 
             c3, c4 = st.columns(2)
             product_type = c3.text_input("Tipo/Variante (es. mixto Tarancon)")
@@ -197,9 +227,8 @@ with tab2:
             price = c8.number_input("Prezzo (opzionale)", min_value=0.0, step=0.01, format="%.2f")
             delivery_notes = c9.text_input("Note scarico (es. descarga miercoles con Esselunga)")
 
-            # Trova codice prodotto
-            product_code = ""
-            if not avail_df2.empty and product_name:
+            # Trova codice prodotto dalla disponibilità settimana (se non già impostato dal catalogo)
+            if not product_code and not avail_df2.empty and product_name:
                 match = avail_df2[avail_df2["product_name"] == product_name]
                 if not match.empty:
                     product_code = match.iloc[0]["product_code"]

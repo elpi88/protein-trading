@@ -420,6 +420,23 @@ def init_db() -> None:
             )
         """)
 
+    # Migrazione 6: tabella document_vault (archivio documenti per ordini e spedizioni)
+    _id_col = "id SERIAL PRIMARY KEY" if DATABASE_URL else "id INTEGER PRIMARY KEY AUTOINCREMENT"
+    with get_conn() as conn:
+        conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS document_vault (
+                {_id_col},
+                entity_type  TEXT NOT NULL,
+                entity_id    TEXT NOT NULL,
+                doc_type     TEXT NOT NULL,
+                filename     TEXT NOT NULL,
+                file_path    TEXT NOT NULL,
+                notes        TEXT,
+                uploaded_by  TEXT,
+                uploaded_at  TEXT
+            )
+        """)
+
 
 # ----------------------------------------------------------------------
 # Cache (compatibile con Streamlit; se non in Streamlit, no-op)
@@ -1323,3 +1340,131 @@ def upsert_supplier_products(supplier_name, products):
                 )
             count += 1
     return count
+
+
+# ======================================================================
+# Document Vault — archivio documenti per ordini e spedizioni
+# ======================================================================
+
+DOC_TYPES = [
+    "Bill of Lading (BoL)",
+    "Health Certificate",
+    "Halal / Kosher Cert",
+    "Customs Declaration",
+    "Invoice",
+    "Certificate of Origin (COO)",
+]
+
+# Documenti obbligatori per tipo entita' (per checklist mancanti)
+REQUIRED_DOCS = {
+    "SHIPMENTS": ["Bill of Lading (BoL)", "Health Certificate", "Customs Declaration"],
+    "INVOICES":  ["Invoice", "Certificate of Origin (COO)"],
+}
+
+VAULT_DIR = ATTACH_DIR / "document_vault"
+
+
+def save_document(entity_type, entity_id, doc_type, filename, content_bytes,
+                  notes="", uploaded_by=""):
+    """Salva un documento su disco e registra i metadati nel DB.
+    Restituisce l'id del record inserito."""
+    dest_dir = VAULT_DIR / entity_type / entity_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = "".join(c for c in filename if c.isalnum() or c in "._- ()[]").strip() or "file"
+    dest = dest_dir / safe_name
+    if dest.exists():
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dest = dest_dir / f"{dest.stem}_{ts}{dest.suffix}"
+    dest.write_bytes(content_bytes)
+    rel_path = str(dest.relative_to(PROJECT_DIR))
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        if DATABASE_URL:
+            conn.execute(
+                "INSERT INTO document_vault "
+                "(entity_type, entity_id, doc_type, filename, file_path, notes, uploaded_by, uploaded_at) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                (entity_type, entity_id, doc_type, safe_name, rel_path, notes, uploaded_by, now)
+            )
+            cur = conn.execute("SELECT id FROM document_vault WHERE file_path = %s", (rel_path,))
+        else:
+            conn.execute(
+                "INSERT INTO document_vault "
+                "(entity_type, entity_id, doc_type, filename, file_path, notes, uploaded_by, uploaded_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (entity_type, entity_id, doc_type, safe_name, rel_path, notes, uploaded_by, now)
+            )
+            cur = conn.execute("SELECT last_insert_rowid()")
+        row = cur.fetchone()
+        return row[0] if row else -1
+
+
+def list_documents(entity_type=None, entity_id=None, doc_type=None):
+    """Ritorna DataFrame con metadati documenti, con filtri opzionali."""
+    conditions, params = [], []
+    if entity_type:
+        conditions.append("entity_type = ?")
+        params.append(entity_type)
+    if entity_id:
+        conditions.append("entity_id = ?")
+        params.append(entity_id)
+    if doc_type:
+        conditions.append("doc_type = ?")
+        params.append(doc_type)
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    sql = f"SELECT * FROM document_vault {where} ORDER BY uploaded_at DESC"
+    with get_conn() as conn:
+        if DATABASE_URL:
+            sql = sql.replace("?", "%s")
+        cur = conn.execute(sql, params)
+        rows = cur.fetchall()
+    if not rows:
+        return pd.DataFrame(columns=["id", "entity_type", "entity_id", "doc_type",
+                                     "filename", "file_path", "notes",
+                                     "uploaded_by", "uploaded_at"])
+    return pd.DataFrame([dict(r) for r in rows])
+
+
+def get_document_bytes(doc_id):
+    """Legge il contenuto fisico di un documento dato il suo id DB."""
+    with get_conn() as conn:
+        if DATABASE_URL:
+            cur = conn.execute("SELECT file_path FROM document_vault WHERE id = %s", (doc_id,))
+        else:
+            cur = conn.execute("SELECT file_path FROM document_vault WHERE id = ?", (doc_id,))
+        row = cur.fetchone()
+    if not row:
+        return None
+    p = PROJECT_DIR / row[0]
+    return p.read_bytes() if p.exists() else None
+
+
+def delete_document(doc_id):
+    """Elimina il file fisico e il record DB. Ritorna True se ok."""
+    with get_conn() as conn:
+        if DATABASE_URL:
+            cur = conn.execute("SELECT file_path FROM document_vault WHERE id = %s", (doc_id,))
+        else:
+            cur = conn.execute("SELECT file_path FROM document_vault WHERE id = ?", (doc_id,))
+        row = cur.fetchone()
+    if not row:
+        return False
+    p = PROJECT_DIR / row[0]
+    if p.exists():
+        p.unlink()
+    with get_conn() as conn:
+        if DATABASE_URL:
+            conn.execute("DELETE FROM document_vault WHERE id = %s", (doc_id,))
+        else:
+            conn.execute("DELETE FROM document_vault WHERE id = ?", (doc_id,))
+    return True
+
+
+def get_missing_docs(entity_type, entity_id):
+    """Restituisce i tipi di documento obbligatori non ancora caricati."""
+    required = REQUIRED_DOCS.get(entity_type, [])
+    if not required:
+        return []
+    df = list_documents(entity_type=entity_type, entity_id=entity_id)
+    present = set(df["doc_type"].tolist()) if not df.empty else set()
+    return [d for d in required if d not in present]

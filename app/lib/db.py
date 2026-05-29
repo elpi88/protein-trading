@@ -118,8 +118,11 @@ class _PgConnWrapper:
         self._cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     def execute(self, sql: str, params=None):
-        # SQLite usa ? come placeholder, psycopg2 usa %s
-        pg_sql = sql.replace("?", "%s")
+        # SQLite usa ? come placeholder, psycopg2 usa %s.
+        # IMPORTANTE: prima escapa i % letterali (es. colonna "VAT %"),
+        # poi sostituisce ? con %s. Senza questo psycopg2 crasherebbe
+        # interpretando "VAT %" come un formato stringa incompleto.
+        pg_sql = sql.replace("%", "%%").replace("?", "%s")
         if params is not None:
             self._cur.execute(pg_sql, list(params))
         else:

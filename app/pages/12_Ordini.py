@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from lib.data import read_sheet, add_row, update_row, delete_row, next_id, get_currencies
-from lib.db import get_supplier_products, get_supplier_names_with_products
+from lib.db import get_supplier_products, get_supplier_names_with_products, get_fx_table
 from lib.theme import apply_theme, kpi_card
 
 from lib.auth import require_login
@@ -367,16 +367,31 @@ if mode in ("add", "edit"):
                                          step=0.5, format="%.1f")
             except Exception:
                 vat = st.number_input("VAT %", value=0.0, step=0.5, format="%.1f")
+
+            # ── Auto-calcolo ────────────────────────────────────────────
+            subtotal_auto = round(float(qty) * float(up), 2) if qty and up else 0.0
+            vat_amount_auto = round(subtotal_auto * float(vat) / 100, 2) if vat else 0.0
+            total_inv_auto = round(subtotal_auto + vat_amount_auto, 2)
+            fx = get_fx_table().get(currency.strip().upper(), 1.0)
+            total_usd_auto = round(total_inv_auto * fx, 2)
+
+            st.caption(f"📐 Calcolato: {currency} {total_inv_auto:,.2f}  ·  USD {total_usd_auto:,.2f}")
+
             try:
-                total_inv = st.number_input("Total Invoice", value=float(existing.get("Total Invoice") or 0),
-                                                step=10.0, format="%.2f")
+                cur_total_inv = float(existing.get("Total Invoice") or total_inv_auto)
             except Exception:
-                total_inv = st.number_input("Total Invoice", value=0.0, step=10.0, format="%.2f")
+                cur_total_inv = total_inv_auto
+            total_inv = st.number_input("Total Invoice", value=cur_total_inv if mode == "edit" else total_inv_auto,
+                                        step=10.0, format="%.2f",
+                                        help="Auto-calcolato da Qty × Unit Price + IVA. Puoi modificarlo manualmente.")
+
             try:
-                total_usd = st.number_input("Total USD", value=float(existing.get("Total USD") or 0),
-                                                step=10.0, format="%.2f")
+                cur_total_usd = float(existing.get("Total USD") or total_usd_auto)
             except Exception:
-                total_usd = st.number_input("Total USD", value=0.0, step=10.0, format="%.2f")
+                cur_total_usd = total_usd_auto
+            total_usd = st.number_input("Total USD", value=cur_total_usd if mode == "edit" else total_usd_auto,
+                                        step=10.0, format="%.2f",
+                                        help="Auto-calcolato da Total Invoice × tasso FX.")
             cur_p = str(existing.get("Payment Status", "PENDING") or "PENDING")
             pay = st.selectbox("Payment Status", PAYMENT_STATUS,
                                  index=PAYMENT_STATUS.index(cur_p) if cur_p in PAYMENT_STATUS else 0)
